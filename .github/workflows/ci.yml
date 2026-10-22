@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen --all-extras
+      - name: Ruff lint (includes flake8-bandit security rules)
+        run: uv run --no-sync ruff check . --output-format=github
+      - name: Ruff format check
+        run: uv run --no-sync ruff format --check .
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: uv sync --frozen --all-extras
+      - name: Tests (mock LLM, no cloud credentials)
+        run: uv run --no-sync pytest --cov=app --cov-report=term-missing --cov-report=xml
+      - uses: actions/upload-artifact@v4
+        if: matrix.python-version == '3.12'
+        with:
+          name: coverage
+          path: coverage.xml
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen --all-extras
+      - name: pip-audit against uv.lock (accepted advisories are documented in SECURITY.md)
+        run: ./scripts/audit.sh
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t secureagentops:ci .
+      - name: Smoke test the container in mock mode
+        run: |
+          docker run -d --name sao -p 8000:8000 --read-only --tmpfs /tmp \
+            -e SAO_SEED_DEMO_DATA=true -e SAO_DEMO_PASSWORD=ci-demo-password-123 \
+            -v sao-data:/app/data secureagentops:ci
+          for i in $(seq 1 30); do curl -fsS localhost:8000/ready && break; sleep 2; done
+          curl -fsS localhost:8000/health
+          TOKEN=$(curl -fsS -X POST localhost:8000/auth/login -H 'content-type: application/json' \
+            -d '{"email":"analyst@acme.example","password":"ci-demo-password-123"}' | jq -r .access_token)
+          curl -fsS -X POST localhost:8000/agent/chat -H "authorization: Bearer $TOKEN" \
+            -H 'content-type: application/json' -d '{"message":"Is the vector store healthy?"}' | jq -e '.status == "completed"'
+          curl -fsS localhost:8000/metrics | grep -q sao_agent_runs_total
+      - name: Container logs
+        if: always()
+        run: docker logs sao || true

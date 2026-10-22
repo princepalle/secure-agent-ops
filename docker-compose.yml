@@ -1,0 +1,54 @@
+# Local demo stack (mock LLM mode by default - no cloud credentials or paid APIs needed).
+#   cp .env.example .env   (or: make env)
+#   docker compose up --build
+# API: http://localhost:8000/docs   Dashboard: http://localhost:8501
+
+services:
+  api:
+    build: .
+    image: secureagentops:local
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SAO_DATA_DIR: /app/data
+      SAO_SEED_DEMO_DATA: ${SAO_SEED_DEMO_DATA:-true}
+    ports:
+      - "127.0.0.1:8000:8000"   # bound to localhost only
+    volumes:
+      - sao-data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    restart: unless-stopped
+
+  dashboard:
+    image: secureagentops:local
+    depends_on:
+      api:
+        condition: service_healthy
+    command: ["streamlit", "run", "frontend/streamlit_app.py", "--server.address=0.0.0.0", "--server.port=8501",
+              "--server.headless=true", "--browser.gatherUsageStats=false"]
+    environment:
+      SAO_API_URL: http://api:8000
+    ports:
+      - "127.0.0.1:8501:8501"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.streamlit
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    restart: unless-stopped
+
+volumes:
+  sao-data:

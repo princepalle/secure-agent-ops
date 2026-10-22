@@ -1,4 +1,39 @@
-node_modules/
-.env*
+# Secrets and local configuration
+.env
+.env.*
 !.env.example
+*.pem
+*.key
+credentials*
+demo-credentials.txt
+.aws/
+
+# Runtime data: SQLite databases, vector store, uploads
+data/
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+chroma/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Editors and OS
+.vscode/
+.idea/
 .DS_Store
+.streamlit/secrets.toml
