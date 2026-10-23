@@ -62,9 +62,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Run the pinned CLI over the full history. gitleaks-action scans "<first pushed commit>^..HEAD",
+      # which fails on a repository's first push because the root commit has no parent.
+      - name: gitleaks (full history)
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz | tar xz gitleaks
+          ./gitleaks git --redact --verbose .
 
   docker:
     runs-on: ubuntu-latest
