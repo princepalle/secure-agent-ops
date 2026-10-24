@@ -40,7 +40,7 @@ run-api: ## Start the API on :8000 with reload
 run-ui: ## Start the Streamlit dashboard on :8501
 	SAO_API_URL=$${SAO_API_URL:-http://localhost:8000} STREAMLIT_CLIENT_TOOLBAR_MODE=minimal \
 	STREAMLIT_SERVER_MAX_UPLOAD_SIZE=5 STREAMLIT_THEME_PRIMARY_COLOR="#2563eb" \
-	$(UV) run --no-sync streamlit run frontend/streamlit_app.py --browser.gatherUsageStats=false
+	$(UV) run --no-sync streamlit run frontend/streamlit_app.py --server.headless=true --browser.gatherUsageStats=false
 
 up: ## Build and start the Docker Compose stack
 	docker compose up --build -d
